@@ -1,630 +1,459 @@
-
-import html
-import json
-import re
-from difflib import SequenceMatcher
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 from urllib.parse import quote
-from urllib.request import Request, urlopen
-
-import numpy as np
-import pandas as pd
-import plotly.express as px
-import streamlit as st
-
+from urllib.request import urlopen, Request
+from difflib import SequenceMatcher
+import re
+import html
 
 # ============================================================
-# PAGE CONFIG
+# K-POP CHART ANALYTICS — PROFESSIONAL DASHBOARD
 # ============================================================
 
 st.set_page_config(
     page_title="K-Pop Chart Analytics",
-    page_icon="K",
+    page_icon="🎧",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-
-# ============================================================
-# DESIGN SYSTEM
-# ============================================================
-
-C = {
-    "navy": "#111329",
-    "navy_2": "#171936",
-    "purple_dark": "#44206A",
-    "purple": "#6D35B1",
-    "purple_mid": "#8A52D1",
-    "purple_light": "#B68AE8",
-    "lavender": "#EEE7F8",
-    "bg": "#F7F4FB",
+# -----------------------------
+# Theme
+# -----------------------------
+COLORS = {
+    "bg": "#F7F5FB",
     "surface": "#FFFFFF",
-    "line": "#E4DDF0",
-    "text": "#17152A",
-    "muted": "#6D6680",
-    "white": "#FFFFFF",
+    "surface_alt": "#FCFAFF",
+    "border": "#E9E3F1",
+    "text": "#21152B",
+    "muted": "#756A7F",
+    "purple": "#6D3FA3",
+    "purple_dark": "#43205F",
+    "purple_mid": "#8B5CC2",
+    "purple_light": "#DCC9EE",
+    "purple_pale": "#F0E8F8",
+    "pink": "#C75C9A",
+    "green": "#43816A",
+    "gold": "#B58A42",
 }
 
-SCALE = [
-    [0.00, "#E7D9F6"],
-    [0.25, "#C9A9EA"],
-    [0.50, "#A475DA"],
-    [0.75, "#8148C2"],
-    [1.00, "#5B238E"],
+PURPLE_SCALE = [
+    "#EEE5F6",
+    "#DCC9EE",
+    "#C4A9DE",
+    "#A782CE",
+    "#8B5CC2",
+    "#6D3FA3",
+    "#54267B",
+    "#43205F",
 ]
 
-
-# ============================================================
-# CSS
-# ============================================================
-
-CSS = r"""
+# -----------------------------
+# Clean, stable CSS
+# -----------------------------
+st.markdown(
+    f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 
-:root {
-    --navy: #111329;
-    --navy2: #171936;
-    --purple: #6D35B1;
-    --purple2: #8A52D1;
-    --lavender: #EEE7F8;
-    --bg: #F7F4FB;
-    --surface: #FFFFFF;
-    --line: #E4DDF0;
-    --text: #17152A;
-    --muted: #6D6680;
-}
+:root {{
+    --bg: {COLORS["bg"]};
+    --surface: {COLORS["surface"]};
+    --border: {COLORS["border"]};
+    --text: {COLORS["text"]};
+    --muted: {COLORS["muted"]};
+    --purple: {COLORS["purple"]};
+    --purple-dark: {COLORS["purple_dark"]};
+    --purple-pale: {COLORS["purple_pale"]};
+}}
 
-* { box-sizing: border-box; }
-
-html, body, [class*="css"] {
+html, body, [class*="css"] {{
     font-family: "DM Sans", sans-serif;
-}
+}}
 
-body {
+.stApp {{
     background: var(--bg);
     color: var(--text);
-}
+}}
 
-[data-testid="stAppViewContainer"] {
-    background: var(--bg);
-}
+[data-testid="stSidebar"] {{
+    background: #FFFFFF;
+    border-right: 1px solid var(--border);
+}}
 
-[data-testid="stHeader"] {
-    background: transparent;
-}
+[data-testid="stSidebar"] > div:first-child {{
+    padding-top: 1.1rem;
+}}
 
-.block-container {
-    max-width: 1500px;
-    padding: 1.4rem 2.0rem 2.5rem !important;
-}
+.block-container {{
+    max-width: 1480px;
+    padding-top: 1.5rem;
+    padding-bottom: 4rem;
+}}
 
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #101226 0%, #171936 100%) !important;
-    border-right: 1px solid #292B4D !important;
-}
+h1, h2, h3, h4 {{
+    font-family: "Plus Jakarta Sans", sans-serif !important;
+    color: var(--text);
+    letter-spacing: -0.025em;
+}}
 
-section[data-testid="stSidebar"] > div {
-    background: transparent !important;
-}
+h1 {{ font-size: 2.05rem !important; }}
+h2 {{ font-size: 1.35rem !important; }}
+h3 {{ font-size: 1.05rem !important; }}
 
-section[data-testid="stSidebar"] .block-container {
-    padding: 1.3rem 1rem 2rem !important;
-}
+[data-testid="stMetric"] {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 17px 18px;
+    box-shadow: 0 5px 18px rgba(66, 32, 95, 0.045);
+}}
 
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-    color: #FFFFFF !important;
-}
+[data-testid="stMetricLabel"] {{
+    color: var(--muted) !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+}}
 
-.sidebar-brand {
-    text-align: center;
-    padding: 12px 4px 22px;
-}
+[data-testid="stMetricValue"] {{
+    color: var(--text) !important;
+    font-family: "Plus Jakarta Sans", sans-serif !important;
+    font-size: 1.55rem !important;
+}}
 
-.brand-title {
-    color: #FFFFFF;
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: 1.15rem;
-    font-weight: 800;
-    letter-spacing: .01em;
-}
+.stButton button {{
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text);
+    font-weight: 600;
+}}
 
-.brand-sub {
-    color: #C9C4DB;
-    font-size: .67rem;
-    letter-spacing: .17em;
-    font-weight: 700;
-    margin-top: 6px;
-}
+.stButton button:hover {{
+    border-color: var(--purple);
+    color: var(--purple);
+}}
 
-.nav-caption,
-.sidebar-label {
-    color: #AAA5C1 !important;
-    font-size: .67rem !important;
-    font-weight: 800 !important;
-    letter-spacing: .13em;
-    text-transform: uppercase;
-}
-
-.sidebar-divider {
-    height: 1px;
-    background: #343650;
-    margin: 14px 0 18px;
-}
-
-section[data-testid="stSidebar"] .stRadio > label {
-    display: none !important;
-}
-
-section[data-testid="stSidebar"] .stRadio [role="radiogroup"] {
-    gap: 5px !important;
-}
-
-section[data-testid="stSidebar"] .stRadio [role="radio"] {
-    min-height: 40px !important;
-    padding: 0 12px !important;
-    border-radius: 9px !important;
-    border: 1px solid transparent !important;
-    background: transparent !important;
-    color: #F6F4FB !important;
-}
-
-section[data-testid="stSidebar"] .stRadio [role="radio"] * {
-    color: #F6F4FB !important;
-}
-
-section[data-testid="stSidebar"] .stRadio [role="radio"][aria-checked="true"] {
-    background: linear-gradient(90deg, #7B3FC6, #6A32AD) !important;
-    border-color: #925BD6 !important;
-    box-shadow: 0 8px 20px rgba(93, 43, 145, .25);
-}
-
-section[data-testid="stSidebar"] .stMultiSelect > div,
-section[data-testid="stSidebar"] .stSelectbox > div {
-    color: #FFFFFF !important;
-}
-
-section[data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background: #15172E !important;
-    border: 1px solid #4A4D70 !important;
-    border-radius: 9px !important;
-    color: #FFFFFF !important;
-}
-
-section[data-testid="stSidebar"] [data-baseweb="select"] * {
-    color: #FFFFFF !important;
-}
-
-section[data-testid="stSidebar"] [data-testid="stSlider"] label {
-    color: #FFFFFF !important;
-}
-
-.sidebar-note {
-    color: #BDB7CF;
-    font-size: .78rem;
-    line-height: 1.55;
-    margin-top: 22px;
-}
-
-/* Hero */
-.hero {
-    position: relative;
+[data-testid="stDataFrame"] {{
+    border: 1px solid var(--border);
+    border-radius: 14px;
     overflow: hidden;
-    border-radius: 0 0 26px 26px;
-    min-height: 205px;
-    padding: 38px 42px;
-    color: white;
-    background:
-        radial-gradient(circle at 82% 18%, rgba(208,164,255,.30), transparent 24%),
-        radial-gradient(circle at 66% 80%, rgba(146,74,215,.28), transparent 35%),
-        linear-gradient(105deg, #3E1B5B 0%, #6A35A1 55%, #8B50D0 100%);
-    box-shadow: 0 18px 35px rgba(74, 37, 103, .18);
-}
+}}
 
-.hero:after {
-    content: "";
-    position: absolute;
-    width: 390px;
-    height: 390px;
-    right: -110px;
-    top: -225px;
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,.18);
-    box-shadow:
-        0 0 0 48px rgba(255,255,255,.035),
-        0 0 0 98px rgba(255,255,255,.025);
-}
+div[data-baseweb="select"] > div {{
+    border-radius: 10px;
+    border-color: var(--border);
+}}
 
-.hero-kicker {
-    position: relative;
-    z-index: 2;
-    font-size: .72rem;
-    letter-spacing: .18em;
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 8px;
+}}
+
+.stTabs [data-baseweb="tab"] {{
+    border-radius: 9px;
+    padding: 8px 15px;
+}}
+
+hr {{
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.3rem 0;
+}}
+
+.small-muted {{
+    color: var(--muted);
+    font-size: 0.84rem;
+}}
+
+.eyebrow {{
+    color: var(--purple);
+    font-size: 0.72rem;
     font-weight: 800;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-}
+    margin-bottom: 0.35rem;
+}}
 
-.hero-title {
-    position: relative;
-    z-index: 2;
-    margin-top: 9px;
+.page-title {{
     font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: clamp(2.2rem, 4vw, 3.4rem);
-    line-height: 1.02;
+    font-size: 2rem;
     font-weight: 800;
-    letter-spacing: -.035em;
-}
+    letter-spacing: -0.04em;
+    margin-bottom: 0.15rem;
+}}
 
-.hero-title span {
-    color: #D4AEFF;
-}
+.page-subtitle {{
+    color: var(--muted);
+    font-size: 0.94rem;
+    margin-bottom: 1.35rem;
+}}
 
-.hero-subtitle {
-    position: relative;
-    z-index: 2;
-    max-width: 780px;
-    margin-top: 12px;
-    font-size: .98rem;
-    line-height: 1.55;
-    color: #F6F0FF;
-}
+.hero {{
+    background: linear-gradient(135deg, #43205F 0%, #6D3FA3 58%, #8B5CC2 100%);
+    border-radius: 22px;
+    padding: 32px 34px;
+    color: white;
+    margin-bottom: 22px;
+    box-shadow: 0 16px 35px rgba(67, 32, 95, 0.18);
+}}
 
-/* Section */
-.section-row {
+.hero-kicker {{
+    color: #E9DDF3;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}}
+
+.hero-title {{
+    font-family: "Plus Jakarta Sans", sans-serif;
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.08;
+    margin: 7px 0 10px;
+}}
+
+.hero-copy {{
+    color: #F2EBF7;
+    max-width: 760px;
+    line-height: 1.6;
+    font-size: 0.93rem;
+}}
+
+.section-head {{
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 15px;
-    margin: 24px 0 11px;
-}
+    align-items: end;
+    gap: 12px;
+    margin: 25px 0 11px;
+}}
 
-.section-title {
-    color: var(--text);
+.section-title {{
     font-family: "Plus Jakarta Sans", sans-serif;
     font-size: 1.08rem;
     font-weight: 800;
-}
+}}
 
-.section-note {
+.section-note {{
     color: var(--muted);
-    font-size: .72rem;
-}
+    font-size: 0.78rem;
+}}
 
-/* KPI */
-.kpi {
-    min-height: 92px;
-    background: white;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 17px 18px;
-    box-shadow: 0 5px 18px rgba(48, 32, 73, .055);
-}
+.card {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 5px 18px rgba(66, 32, 95, 0.035);
+}}
 
-.kpi-value {
-    color: var(--text);
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: 1.55rem;
-    line-height: 1.1;
-    font-weight: 800;
-}
-
-.kpi-label {
-    margin-top: 7px;
-    color: var(--muted);
-    font-size: .76rem;
-}
-
-/* Album cards */
-.song-card {
-    background: #FFFFFF;
-    border: 1px solid var(--line);
-    border-radius: 14px;
+.rank-card {{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: 0 5px 18px rgba(48, 32, 73, .055);
-}
+    box-shadow: 0 5px 18px rgba(66, 32, 95, 0.035);
+}}
 
-.song-image {
+.rank-art {{
     width: 100%;
-    height: 150px;
+    aspect-ratio: 1 / 1;
     object-fit: cover;
     display: block;
-    background: linear-gradient(135deg, #E9DDF5, #D6C0EC);
-}
+    background: #EEE8F4;
+}}
 
-.song-placeholder {
-    width: 100%;
-    height: 150px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #E9DDF5, #D6C0EC);
-    color: #7441A8;
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: 2.4rem;
+.rank-body {{
+    padding: 12px 13px 14px;
+}}
+
+.rank-number {{
+    color: var(--purple);
     font-weight: 800;
-}
+    font-size: 0.73rem;
+}}
 
-.song-info {
-    position: relative;
-    padding: 14px 14px 13px;
-}
-
-.rank {
-    position: absolute;
-    top: -19px;
-    left: 12px;
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #6B25A9, #9148D2);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    font-size: .82rem;
-    box-shadow: 0 5px 12px rgba(90, 35, 142, .30);
-}
-
-.song-name {
-    margin-top: 5px;
+.rank-song {{
     color: var(--text);
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: .94rem;
     font-weight: 800;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.song-artist {
     margin-top: 4px;
-    color: #57516A;
-    font-size: .73rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+    line-height: 1.25;
+}}
 
-.score-row {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 13px;
-    font-size: .67rem;
-}
+.rank-artist {{
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-top: 3px;
+}}
 
-.score-label { color: #8A8398; }
-.score-value { color: #6330A2; font-weight: 800; }
-
-.score-track {
-    height: 5px;
-    margin-top: 7px;
-    background: #E6DDF1;
-    border-radius: 99px;
-    overflow: hidden;
-}
-
-.score-fill {
-    height: 100%;
-    border-radius: 99px;
-    background: linear-gradient(90deg, #5D2795, #9759D9);
-}
-
-/* Chart cards */
-.chart-card {
-    background: #FFFFFF;
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 12px 12px 8px;
-    box-shadow: 0 5px 18px rgba(48, 32, 73, .045);
-}
-
-.chart-heading {
-    color: var(--text);
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: .98rem;
+.score-pill {{
+    display: inline-block;
+    background: var(--purple-pale);
+    color: var(--purple-dark);
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: 0.7rem;
     font-weight: 800;
-    padding: 5px 8px 0;
-}
+    margin-top: 9px;
+}}
 
-/* Insight cards */
-.info-card {
-    height: 100%;
-    background: white;
-    border: 1px solid var(--line);
-    border-radius: 14px;
+.insight {{
+    background: linear-gradient(135deg, #F5EFF9, #FBF9FD);
+    border: 1px solid var(--border);
+    border-radius: 15px;
     padding: 17px 18px;
-}
+}}
 
-.info-title {
-    color: var(--text);
-    font-family: "Plus Jakarta Sans", sans-serif;
-    font-size: .9rem;
+.insight-title {{
+    color: var(--purple-dark);
     font-weight: 800;
-    margin-bottom: 8px;
-}
+    margin-bottom: 5px;
+}}
 
-.info-text, .info-card li {
-    color: #5D576D;
-    font-size: .77rem;
-    line-height: 1.6;
-}
+.insight-copy {{
+    color: var(--muted);
+    line-height: 1.55;
+    font-size: 0.85rem;
+}}
 
-/* Native Streamlit cards */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: #FFFFFF !important;
-    border: 1px solid var(--line) !important;
-    border-radius: 14px !important;
-    box-shadow: 0 5px 18px rgba(48, 32, 73, .045);
-}
+.profile-score {{
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    padding: 17px 10px;
+}}
 
-div[data-testid="stVerticalBlockBorderWrapper"] > div {
-    border-radius: 14px !important;
-}
+.profile-score-label {{
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+}}
 
-/* Tables */
-[data-testid="stDataFrame"] {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    overflow: hidden;
-}
+.profile-score-value {{
+    font-family: "Plus Jakarta Sans", sans-serif;
+    color: var(--purple-dark);
+    font-size: 1.45rem;
+    font-weight: 800;
+    margin-top: 3px;
+}}
 
-/* Buttons */
-.stButton > button {
-    border: 1px solid #D8C9EA !important;
-    background: #F3ECFB !important;
-    color: #5A278F !important;
-    border-radius: 9px !important;
-    font-weight: 700 !important;
-}
+.footer {{
+    margin-top: 38px;
+    padding: 18px 0 5px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    text-align: center;
+    font-size: 0.76rem;
+}}
 
-.stDownloadButton > button {
-    border-radius: 9px !important;
-    border: 1px solid #D8C9EA !important;
-}
-
-/* Selects on main page */
-[data-baseweb="select"] > div {
-    border-radius: 9px !important;
-}
-
-/* Mobile */
-@media (max-width: 900px) {
-    .block-container {
-        padding: 1rem !important;
-    }
-
-    .hero {
-        padding: 28px 24px;
-    }
-}
+@media (max-width: 900px) {{
+    .block-container {{ padding: 1rem 1rem 3rem; }}
+    .hero-title {{ font-size: 1.75rem; }}
+    .page-title {{ font-size: 1.65rem; }}
+}}
 </style>
-"""
-
-st.markdown(CSS, unsafe_allow_html=True)
-
+""",
+    unsafe_allow_html=True,
+)
 
 # ============================================================
-# PROJECT PATHS
+# DATA LOADING
 # ============================================================
 
-THIS_DIR = Path(__file__).resolve().parent
-
-# This file is intended to live in project/dashboard/app.py.
-PROJECT_ROOT = THIS_DIR.parent if THIS_DIR.name.lower() == "dashboard" else THIS_DIR
-
-SEARCH_DIRS = [
-    THIS_DIR,
-    PROJECT_ROOT,
-    PROJECT_ROOT / "outputs",
-    PROJECT_ROOT / "data",
-    PROJECT_ROOT / "data" / "processed",
-    PROJECT_ROOT / "dashboard",
-    PROJECT_ROOT / "dashboard" / "assets",
-]
-
-# De-duplicate paths while preserving order.
-SEARCH_DIRS = list(dict.fromkeys(p.resolve() for p in SEARCH_DIRS if p.exists()))
+ROOT = Path(__file__).resolve().parent
+SEARCH_ROOTS = [ROOT, ROOT.parent, ROOT.parent.parent, ROOT.parent.parent.parent]
 
 
-def find_file(filename):
-    for directory in SEARCH_DIRS:
-        candidate = directory / filename
-        if candidate.exists():
-            return candidate
+def find_output(name):
+    # Support both the original local project layout and the GitHub/Streamlit layout.
+    for base in SEARCH_ROOTS:
+        candidates = [
+            base / name,
+            base / "outputs" / name,
+        ]
+        for path in candidates:
+            if path.exists():
+                return path
+    return None
+
+
+def find_data(name):
+    for base in SEARCH_ROOTS:
+        candidates = [
+            base / name,
+            base / "data" / name,
+            base / "data" / "processed" / name,
+        ]
+        for path in candidates:
+            if path.exists():
+                return path
     return None
 
 
 @st.cache_data(show_spinner=False)
-def read_csv_file(path_string):
-    if not path_string:
-        return None
+def load_csv(path_string):
     try:
         return pd.read_csv(path_string)
     except Exception:
         return None
 
 
-def load_csv(filename):
-    path = find_file(filename)
-    return read_csv_file(str(path)) if path else None
+def load_output(name):
+    path = find_output(name)
+    return load_csv(str(path)) if path else None
 
 
-# ============================================================
-# DATA
-# ============================================================
-
-integrated = load_csv("phase7_integrated_kpop_analysis.csv")
+integrated = load_output("phase7_integrated_kpop_analysis.csv")
 if integrated is None:
-    integrated = load_csv("KPOP_FINAL_DASHBOARD_DATA.csv")
+    integrated = load_output("KPOP_FINAL_DASHBOARD_DATA.csv")
 
-momentum = load_csv("phase4_comeback_momentum_events.csv")
-fandom = load_csv("phase5_fandom_intensity_song_analysis.csv")
-sustainability = load_csv("phase6_chart_sustainability_analysis.csv")
-artist_sustainability = load_csv("phase6_artist_sustainability_analysis.csv")
+momentum = load_output("phase4_comeback_momentum_events.csv")
+fandom = load_output("phase5_fandom_intensity_song_analysis.csv")
+sustainability = load_output("phase6_chart_sustainability_analysis.csv")
+artist_sustainability = load_output("phase6_artist_sustainability_analysis.csv")
 
-cleaned = load_csv("Atlantic_South_Korea_Cleaned.csv")
-raw = load_csv("Atlantic_South_Korea.csv")
+cleaned_path = find_data("Atlantic_South_Korea_Cleaned.csv")
+raw_path = find_data("Atlantic_South_Korea.csv")
 
-
-def make_numeric(df, columns):
-    if df is None:
-        return
-    for col in columns:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-
-
-NUMERIC_COLUMNS = [
-    "overall_performance_score",
-    "average_momentum_score",
-    "fandom_intensity_score",
-    "sustainability_score",
-    "total_reentries",
-    "average_gap_days",
-    "longest_gap_days",
-    "best_reentry_position",
-    "average_reentry_position",
-    "gap_days",
-    "reentry_position",
-    "momentum_score",
-    "fandom_score",
-]
-
-for frame in [
-    integrated,
-    momentum,
-    fandom,
-    sustainability,
-    artist_sustainability,
-    cleaned,
-    raw,
-]:
-    make_numeric(frame, NUMERIC_COLUMNS)
+cleaned = load_csv(str(cleaned_path)) if cleaned_path else None
+raw = load_csv(str(raw_path)) if raw_path else None
 
 
 # ============================================================
 # HELPERS
 # ============================================================
 
-def normalize(value):
-    value = "" if value is None else str(value)
-    value = value.lower().strip()
-    value = re.sub(r"[\(\)\[\]\{\}:,'\".!?]", " ", value)
-    value = re.sub(r"\s+", " ", value)
-    return value
+REQUIRED = [
+    "song",
+    "artist",
+    "overall_performance_score",
+    "average_momentum_score",
+    "fandom_intensity_score",
+    "sustainability_score",
+]
 
 
-def fmt(value, decimals=1):
-    if value is None:
+def safe_num(df, cols):
+    if df is None:
+        return
+    for col in cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+
+def normalize_text(value):
+    return re.sub(r"[^a-z0-9]+", " ", str(value).lower()).strip()
+
+
+def nice_number(value, decimals=1):
+    if pd.isna(value):
         return "—"
-    try:
-        if pd.isna(value):
-            return "—"
-        return f"{float(value):,.{decimals}f}"
-    except Exception:
-        return str(value)
+    return f"{value:,.{decimals}f}"
 
 
 def first_existing(df, candidates):
@@ -636,270 +465,260 @@ def first_existing(df, candidates):
     return None
 
 
-def apply_filters(df, selected_artists, selected_categories):
-    if df is None:
-        return None
+def prepare_data():
+    global integrated, momentum, fandom, sustainability, artist_sustainability
 
-    result = df.copy()
-
-    if selected_artists and "artist" in result.columns:
-        result = result[
-            result["artist"].astype(str).isin([str(x) for x in selected_artists])
-        ]
-
-    if selected_categories and "fandom_category" in result.columns:
-        result = result[
-            result["fandom_category"].astype(str).isin(
-                [str(x) for x in selected_categories]
-            )
-        ]
-
-    return result
-
-
-def section(title, note=""):
-    note_html = (
-        f'<span class="section-note">{html.escape(str(note))}</span>'
-        if note else ""
-    )
-    markup = (
-        '<div class="section-row">'
-        f'<div class="section-title">{html.escape(str(title))}</div>'
-        f'{note_html}'
-        '</div>'
-    )
-    st.markdown(markup, unsafe_allow_html=True)
-
-
-def page_header(kicker, title, subtitle):
-    title_html = html.escape(str(title))
-    subtitle_html = html.escape(str(subtitle))
-    kicker_html = html.escape(str(kicker))
-
-    markup = (
-        '<div class="hero">'
-        f'<div class="hero-kicker">{kicker_html}</div>'
-        f'<div class="hero-title">K-Pop Chart <span>Analytics</span></div>'
-        f'<div class="hero-subtitle">{subtitle_html}</div>'
-        '</div>'
-    )
-    st.markdown(markup, unsafe_allow_html=True)
-
-
-def kpi(value, label):
-    return (
-        '<div class="kpi">'
-        f'<div class="kpi-value">{html.escape(str(value))}</div>'
-        f'<div class="kpi-label">{html.escape(str(label))}</div>'
-        '</div>'
-    )
-
-
-def show_kpis(items):
-    cols = st.columns(len(items))
-    for col, (value, label) in zip(cols, items):
-        with col:
-            st.markdown(kpi(value, label), unsafe_allow_html=True)
-
-
-@st.cache_data(show_spinner=False)
-def get_cover(song, artist):
-    song_key = normalize(song)
-    artist_key = normalize(artist)
-
-    # Local project CSVs.
-    for data in (cleaned, raw):
-        if data is None or data.empty or "song" not in data.columns:
-            continue
-
-        cover_col = first_existing(
-            data,
+    if integrated is not None:
+        safe_num(
+            integrated,
             [
-                "album_cover_url",
-                "album_art_url",
-                "cover_url",
-                "image_url",
-                "album_cover",
-                "cover",
+                "overall_performance_score",
+                "average_momentum_score",
+                "fandom_intensity_score",
+                "sustainability_score",
+                "total_reentries",
+                "average_gap_days",
+                "longest_gap_days",
+                "best_reentry_position",
+                "average_reentry_position",
             ],
         )
 
-        if not cover_col:
+    if momentum is not None:
+        safe_num(
+            momentum,
+            ["gap_days", "reentry_position", "momentum_score"],
+        )
+
+    if fandom is not None:
+        safe_num(
+            fandom,
+            ["fandom_intensity_score", "average_momentum_score", "sustainability_score"],
+        )
+
+    if sustainability is not None:
+        safe_num(
+            sustainability,
+            ["sustainability_score", "average_gap_days", "total_reentries"],
+        )
+
+    if artist_sustainability is not None:
+        safe_num(
+            artist_sustainability,
+            [
+                "sustainability_score",
+                "average_momentum_score",
+                "fandom_intensity_score",
+            ],
+        )
+
+
+prepare_data()
+
+
+def get_cover(song, artist):
+    """Use a local cover URL first, then iTunes as a lightweight fallback."""
+    datasets = [cleaned, raw]
+
+    for df in datasets:
+        if df is None or "album_cover_url" not in df.columns:
             continue
 
-        work = data.copy()
-        work["_song_key"] = work["song"].fillna("").astype(str).map(normalize)
+        work = df.copy()
+        if "song" not in work.columns:
+            continue
 
-        matches = work[work["_song_key"] == song_key]
+        song_norm = normalize_text(song)
+        artist_norm = normalize_text(artist)
 
-        if "artist" in work.columns and not matches.empty:
-            artist_matches = matches[
-                matches["artist"].fillna("").astype(str).map(normalize) == artist_key
+        work["_song_norm"] = work["song"].map(normalize_text)
+        exact = work[work["_song_norm"] == song_norm]
+
+        if "artist" in work.columns:
+            exact_artist = exact[
+                exact["artist"].map(normalize_text) == artist_norm
             ]
-            if not artist_matches.empty:
-                matches = artist_matches
+            if not exact_artist.empty:
+                exact = exact_artist
 
-        for value in matches[cover_col].dropna().astype(str):
-            value = value.strip()
+        for value in exact["album_cover_url"].dropna().astype(str):
             if value.startswith(("http://", "https://")):
                 return value
 
-    # Online fallback.
+    # Online fallback
     try:
         query = quote(f"{song} {artist}")
-        url = (
-            "https://itunes.apple.com/search"
-            f"?term={query}&entity=song&limit=8"
-        )
-
-        request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(request, timeout=6) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-
-        results = payload.get("results", [])
-
-        for item in results:
-            result_song = normalize(item.get("trackName", ""))
-            result_artist = normalize(item.get("artistName", ""))
-
-            song_match = (
-                song_key == result_song
-                or song_key in result_song
-                or result_song in song_key
-            )
-            artist_match = (
-                artist_key == result_artist
-                or artist_key in result_artist
-                or result_artist in artist_key
-            )
-
-            if song_match and artist_match:
-                artwork = item.get("artworkUrl100") or item.get("artworkUrl60")
-                if artwork:
-                    return (
-                        artwork
-                        .replace("100x100", "600x600")
-                        .replace("60x60", "600x600")
-                    )
-
-        if results:
-            artwork = (
-                results[0].get("artworkUrl100")
-                or results[0].get("artworkUrl60")
-            )
-            if artwork:
-                return (
-                    artwork
-                    .replace("100x100", "600x600")
-                    .replace("60x60", "600x600")
-                )
-
+        url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
+        req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        if data.get("results"):
+            art = data["results"][0].get("artworkUrl100")
+            if art:
+                return art.replace("100x100", "600x600")
     except Exception:
         pass
 
     return ""
 
 
-def render_song_card(rank, song, artist, score):
-    cover = get_cover(song, artist)
-
-    with st.container(border=True):
-        if cover:
-            st.image(cover, width="stretch")
-        else:
-            st.markdown(
-                '<div class="song-placeholder">K</div>',
-                unsafe_allow_html=True,
-            )
-
-        safe_song = html.escape(str(song))
-        safe_artist = html.escape(str(artist))
-
-        try:
-            score_value = float(score)
-            percentage = score_value * 100 if score_value <= 1.2 else score_value
-            percentage = max(0, min(100, percentage))
-        except Exception:
-            percentage = 0
-
-        st.markdown(
-            '<div class="song-info">'
-            f'<div class="rank">{rank}</div>'
-            f'<div class="song-name">{safe_song}</div>'
-            f'<div class="song-artist">{safe_artist}</div>'
-            '<div class="score-row">'
-            '<span class="score-label">Integrated score</span>'
-            f'<span class="score-value">{fmt(score, 3)}</span>'
-            '</div>'
-            '<div class="score-track">'
-            f'<div class="score-fill" style="width:{percentage:.0f}%"></div>'
-            '</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+@st.cache_data(show_spinner=False)
+def cached_cover(song, artist):
+    return get_cover(song, artist)
 
 
-def style_chart(fig, height=350):
-    fig.update_layout(
-        height=height,
-        margin=dict(l=8, r=8, t=12, b=12),
-        title=dict(text=""),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="DM Sans", color=C["text"], size=11),
-        showlegend=False,
-        coloraxis_colorbar=dict(
-            thickness=11,
-            outlinewidth=0,
-            tickfont=dict(size=9),
-        ),
-        hoverlabel=dict(
-            bgcolor="white",
-            font_family="DM Sans",
-            font_size=11,
-        ),
-    )
-
-    fig.update_xaxes(
-        showgrid=True,
-        gridcolor="#ECE8F1",
-        zeroline=False,
-        linecolor="#E6E0EB",
-        title_font=dict(size=10),
-    )
-
-    fig.update_yaxes(
-        showgrid=True,
-        gridcolor="#ECE8F1",
-        zeroline=False,
-        linecolor="#E6E0EB",
-        title_font=dict(size=10),
-    )
-
-    return fig
-
-
-def chart_card_title(title, note=""):
-    note_html = (
-        f'<span class="section-note">{html.escape(note)}</span>'
-        if note else ""
-    )
+def page_header(kicker, title, subtitle):
     st.markdown(
-        '<div class="chart-heading">'
-        f'{html.escape(title)}'
-        f'{note_html}'
-        '</div>',
+        f"""
+        <div class="eyebrow">{html.escape(kicker)}</div>
+        <div class="page-title">{html.escape(title)}</div>
+        <div class="page-subtitle">{html.escape(subtitle)}</div>
+        """,
         unsafe_allow_html=True,
     )
 
 
-def show_chart(fig, height=350):
-    st.plotly_chart(
-        style_chart(fig, height),
+def section_head(title, note=""):
+    note_html = f'<div class="section-note">{html.escape(note)}</div>' if note else ""
+    st.markdown(
+        f"""
+        <div class="section-head">
+            <div class="section-title">{html.escape(title)}</div>
+            {note_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def chart_layout(fig, height=390):
+    fig.update_layout(
+        height=height,
+        margin=dict(l=8, r=8, t=38, b=8),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="DM Sans", color=COLORS["text"]),
+        title_font=dict(family="Plus Jakarta Sans", size=15),
+        legend=dict(
+            bgcolor="rgba(255,255,255,0)",
+            font=dict(size=11),
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=12,
+            font_family="DM Sans",
+        ),
+    )
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="#EEE8F4",
+        zeroline=False,
+        linecolor="#E9E3F1",
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="#EEE8F4",
+        zeroline=False,
+        linecolor="#E9E3F1",
+    )
+    return fig
+
+
+def show_chart(fig, height=390):
+    st.plotly_chart(chart_layout(fig, height), use_container_width=True, config={"displayModeBar": False})
+
+
+def empty_state(message):
+    st.info(message)
+
+
+def filtered_integrated(selected_artists, selected_categories):
+    if integrated is None:
+        return None
+
+    df = integrated.copy()
+
+    if selected_artists and "artist" in df.columns:
+        df = df[df["artist"].isin(selected_artists)]
+
+    if selected_categories and "fandom_category" in df.columns:
+        df = df[df["fandom_category"].isin(selected_categories)]
+
+    return df
+
+
+def top_cards(df, n=5):
+    if df is None or df.empty:
+        empty_state("No song data is available for the current filters.")
+        return
+
+    score_col = first_existing(df, ["overall_performance_score"])
+    if score_col:
+        work = df.sort_values(score_col, ascending=False).head(n)
+    else:
+        work = df.head(n)
+
+    cols = st.columns(n)
+    for idx, (_, row) in enumerate(work.iterrows()):
+        with cols[idx]:
+            song = str(row.get("song", "Unknown"))
+            artist = str(row.get("artist", "Unknown"))
+            cover = cached_cover(song, artist)
+            art = (
+                f'<img class="rank-art" src="{html.escape(cover)}">'
+                if cover
+                else '<div class="rank-art"></div>'
+            )
+            score = row.get("overall_performance_score", np.nan)
+            st.markdown(
+                f"""
+                <div class="rank-card">
+                    {art}
+                    <div class="rank-body">
+                        <div class="rank-number">#{idx + 1}</div>
+                        <div class="rank-song">{html.escape(song)}</div>
+                        <div class="rank-artist">{html.escape(artist)}</div>
+                        <span class="score-pill">Score {nice_number(score)}</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def ranking_table(df, n=10):
+    if df is None or df.empty:
+        empty_state("No ranking data is available.")
+        return
+
+    score = first_existing(df, ["overall_performance_score"])
+    if score:
+        work = df.sort_values(score, ascending=False).head(n).copy()
+    else:
+        work = df.head(n).copy()
+
+    preferred = [
+        "song",
+        "artist",
+        "total_reentries",
+        "average_gap_days",
+        "best_reentry_position",
+        "average_momentum_score",
+        "fandom_intensity_score",
+        "sustainability_score",
+        "overall_performance_score",
+    ]
+    cols = [c for c in preferred if c in work.columns]
+    st.dataframe(
+        work[cols],
         use_container_width=True,
-        config={
-            "displayModeBar": False,
-            "responsive": True,
+        hide_index=True,
+        column_config={
+            "average_gap_days": st.column_config.NumberColumn("Avg gap", format="%.1f"),
+            "average_momentum_score": st.column_config.NumberColumn("Momentum", format="%.1f"),
+            "fandom_intensity_score": st.column_config.NumberColumn("Fandom", format="%.1f"),
+            "sustainability_score": st.column_config.NumberColumn("Sustainability", format="%.1f"),
+            "overall_performance_score": st.column_config.NumberColumn("Overall", format="%.1f"),
         },
     )
 
@@ -910,10 +729,19 @@ def show_chart(fig, height=350):
 
 with st.sidebar:
     st.markdown(
-        '<div class="sidebar-brand">'
-        '<div class="brand-title">K-POP ANALYTICS</div>'
-        '<div class="brand-sub">SOUTH KOREA TOP 50</div>'
-        '</div>',
+        f"""
+        <div style="padding:6px 4px 18px;">
+            <div style="font-size:0.7rem;font-weight:800;letter-spacing:0.12em;color:{COLORS["purple"]};">
+                K-POP DATA PRODUCT
+            </div>
+            <div style="font-family:'Plus Jakarta Sans';font-size:1.25rem;font-weight:800;margin-top:4px;">
+                Chart Analytics
+            </div>
+            <div class="small-muted" style="margin-top:6px;line-height:1.5;">
+                Comebacks, fandom intensity and chart sustainability in one workspace.
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -928,243 +756,175 @@ with st.sidebar:
         "About Project",
     ]
 
-    page = st.radio(
-        "Navigation",
-        pages,
-        index=0,
-        label_visibility="collapsed",
-    )
+    page = st.radio("Navigate", pages, label_visibility="collapsed")
 
-    st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="nav-caption">Filters</div>', unsafe_allow_html=True)
+    st.divider()
 
-    artist_options = []
+    st.markdown("**Filters**")
+
+    all_artists = []
     if integrated is not None and "artist" in integrated.columns:
-        artist_options = sorted(
+        all_artists = sorted(
             integrated["artist"].dropna().astype(str).unique().tolist()
         )
 
-    category_options = []
+    selected_artists = st.multiselect(
+        "Artist",
+        all_artists,
+        placeholder="All artists",
+    )
+
+    categories = []
     if integrated is not None and "fandom_category" in integrated.columns:
-        category_options = sorted(
+        categories = sorted(
             integrated["fandom_category"].dropna().astype(str).unique().tolist()
         )
 
-    st.markdown('<div class="sidebar-label">Artist</div>', unsafe_allow_html=True)
-    selected_artists = st.multiselect(
-        "Artist filter",
-        artist_options,
-        label_visibility="collapsed",
+    selected_categories = st.multiselect(
+        "Fandom category",
+        categories,
+        placeholder="All categories",
     )
 
-    if category_options:
-        st.markdown(
-            '<div class="sidebar-label" style="margin-top:14px;">Category</div>',
-            unsafe_allow_html=True,
-        )
-        selected_categories = st.multiselect(
-            "Category filter",
-            category_options,
-            label_visibility="collapsed",
-        )
-    else:
-        selected_categories = []
+    ranking_size = st.slider("Ranking size", 5, 15, 10)
 
-    st.markdown(
-        '<div class="sidebar-label" style="margin-top:14px;">Ranking size</div>',
-        unsafe_allow_html=True,
-    )
-    ranking_size = st.slider(
-        "Ranking size",
-        min_value=5,
-        max_value=10,
-        value=10,
-        label_visibility="collapsed",
+    st.divider()
+
+    st.caption(
+        "Scores are project-specific analytical indices. They are not direct measurements of real-world fandom size, fan count, or commercial success."
     )
 
-    st.markdown(
-        '<div class="sidebar-divider"></div>'
-        '<div class="sidebar-note">'
-        'Scores are project-specific analytical indices derived from chart data. '
-        'They are not direct measurements of fan count, audience size, or commercial success.'
-        '</div>',
-        unsafe_allow_html=True,
-    )
 
+df = filtered_integrated(selected_artists, selected_categories)
 
 # ============================================================
 # HOME
 # ============================================================
 
 if page == "Home":
-    page_header(
-        "SOUTH KOREA TOP 50 · 2021 – 2026",
-        "K-Pop Chart Analytics",
-        "Comebacks, fandom intensity, sustainability and more — exploring the stories behind the charts.",
+    st.markdown(
+        f"""
+        <div class="hero">
+            <div class="hero-kicker">South Korea Top 50 · Integrated Analysis</div>
+            <div class="hero-title">K-Pop Chart Analytics</div>
+            <div class="hero-copy">
+                A focused view of chart re-entry, comeback momentum, fandom intensity,
+                sustainability and integrated song performance.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-
-    df = apply_filters(integrated, selected_artists, selected_categories)
 
     if df is None or df.empty:
-        st.error(
-            "Integrated data could not be loaded. Check the CSV filenames and project folder structure."
+        empty_state("Integrated dashboard data could not be found. Place the Phase 7 integrated CSV beside this app.")
+    else:
+        section_head("Executive snapshot", "Current filter selection")
+
+        songs = df["song"].nunique() if "song" in df.columns else len(df)
+        artists = df["artist"].nunique() if "artist" in df.columns else 0
+        reentries = (
+            int(df["total_reentries"].sum())
+            if "total_reentries" in df.columns
+            else (len(momentum) if momentum is not None else 0)
         )
-        st.stop()
+        avg_gap = (
+            df["average_gap_days"].mean()
+            if "average_gap_days" in df.columns
+            else np.nan
+        )
+        top_name = (
+            df.sort_values("overall_performance_score", ascending=False).iloc[0]["song"]
+            if "overall_performance_score" in df.columns and not df.empty
+            else "—"
+        )
 
-    songs_count = int(df["song"].nunique()) if "song" in df.columns else len(df)
-    artists_count = int(df["artist"].nunique()) if "artist" in df.columns else 0
+        k = st.columns(5)
+        k[0].metric("Songs", f"{songs:,}")
+        k[1].metric("Artists", f"{artists:,}")
+        k[2].metric("Re-entry events", f"{reentries:,}")
+        k[3].metric("Average gap", f"{nice_number(avg_gap)} days")
+        k[4].metric("Top performer", str(top_name)[:24])
 
-    if "total_reentries" in df.columns:
-        reentries = int(pd.to_numeric(df["total_reentries"], errors="coerce").fillna(0).sum())
-    elif momentum is not None:
-        reentries = len(momentum)
-    else:
-        reentries = 0
+        section_head("Top performers", "Integrated performance score")
+        top_cards(df, min(5, len(df)))
 
-    avg_gap = (
-        pd.to_numeric(df["average_gap_days"], errors="coerce").mean()
-        if "average_gap_days" in df.columns
-        else np.nan
-    )
-
-    if "overall_performance_score" in df.columns and not df.empty:
-        top_row = df.sort_values(
-            "overall_performance_score",
-            ascending=False,
-        ).iloc[0]
-        top_song = str(top_row.get("song", "—"))
-    else:
-        top_song = "—"
-
-    show_kpis(
-        [
-            (f"{songs_count:,}", "Songs Analysed"),
-            (f"{artists_count:,}", "Artists"),
-            (f"{reentries:,}", "Re-entry Events"),
-            (f"{fmt(avg_gap)}", "Average Gap (days)"),
-            (top_song[:20], "Top Performer"),
-        ]
-    )
-
-    section("Top 5 Performers", "Based on Integrated Performance Score")
-
-    score_col = first_existing(df, ["overall_performance_score"])
-
-    if score_col:
-        top = df.sort_values(score_col, ascending=False).head(5)
-        cards = st.columns(5)
-
-        for i, (_, row) in enumerate(top.iterrows()):
-            with cards[i]:
-                render_song_card(
-                    i + 1,
-                    row.get("song", "Unknown"),
-                    row.get("artist", "Unknown"),
-                    row.get(score_col, np.nan),
-                )
-
-    st.write("")
-
-    left, right = st.columns([1.08, 0.92], gap="medium")
-
-    with left:
-        with st.container(border=True):
-            chart_card_title("Top 10 Songs by Overall Performance")
-
-        if score_col:
-            work = df.sort_values(score_col, ascending=False).head(10).copy()
-            work["label"] = work["song"].astype(str)
-
+        c1, c2 = st.columns([1.15, 1])
+        with c1:
+            section_head("Overall performance", "Highest integrated scores")
+            work = df.sort_values("overall_performance_score", ascending=False).head(ranking_size)
             fig = px.bar(
-                work.sort_values(score_col),
-                x=score_col,
-                y="label",
+                work.sort_values("overall_performance_score"),
+                x="overall_performance_score",
+                y="song",
                 orientation="h",
-                color=score_col,
-                color_continuous_scale=SCALE,
-                text=score_col,
-                hover_data=["artist"] if "artist" in work.columns else None,
+                color="overall_performance_score",
+                color_continuous_scale=PURPLE_SCALE,
+                hover_data=["artist"],
             )
-            fig.update_traces(
-                texttemplate="%{text:.3f}",
-                textposition="outside",
-                cliponaxis=False,
-                marker_line_width=0,
+            fig.update_layout(coloraxis_showscale=False)
+            show_chart(fig, 430)
+
+        with c2:
+            section_head("Momentum × fandom", "Each point represents a song")
+            x = "average_momentum_score"
+            y = "fandom_intensity_score"
+            if x in df.columns and y in df.columns:
+                fig = px.scatter(
+                    df,
+                    x=x,
+                    y=y,
+                    hover_name="song",
+                    hover_data=["artist"],
+                    size="sustainability_score" if "sustainability_score" in df.columns else None,
+                    color="sustainability_score" if "sustainability_score" in df.columns else None,
+                    color_continuous_scale=PURPLE_SCALE,
+                )
+                show_chart(fig, 430)
+            else:
+                empty_state("Momentum and fandom fields are not available.")
+
+        section_head("Project insights", "Read the indices together")
+        i1, i2, i3 = st.columns(3)
+        with i1:
+            st.markdown(
+                """
+                <div class="insight">
+                    <div class="insight-title">Comeback momentum</div>
+                    <div class="insight-copy">
+                        Measures how strongly songs return to the chart after an absence,
+                        using the project’s comeback-event analysis.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-            fig.update_layout(
-                coloraxis_showscale=False,
-                xaxis_title="Overall Performance Score",
-                yaxis_title="",
+        with i2:
+            st.markdown(
+                """
+                <div class="insight">
+                    <div class="insight-title">Fandom intensity</div>
+                    <div class="insight-copy">
+                        Combines the project’s selected chart-behaviour signals into a
+                        song-level fandom intensity index.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-            show_chart(fig, 365)
-        else:
-            st.info("Overall performance score is not available.")
-
-    
-    with right:
-        with st.container(border=True):
-            chart_card_title("Momentum vs Fandom Intensity", "Bubble size = sustainability")
-
-        required = {"average_momentum_score", "fandom_intensity_score"}
-
-        if required.issubset(df.columns):
-            plot_df = df.copy()
-
-            fig = px.scatter(
-                plot_df,
-                x="average_momentum_score",
-                y="fandom_intensity_score",
-                size="sustainability_score" if "sustainability_score" in plot_df.columns else None,
-                color="sustainability_score" if "sustainability_score" in plot_df.columns else None,
-                hover_name="song" if "song" in plot_df.columns else None,
-                hover_data=["artist"] if "artist" in plot_df.columns else None,
-                color_continuous_scale=SCALE,
+        with i3:
+            st.markdown(
+                """
+                <div class="insight">
+                    <div class="insight-title">Sustainability</div>
+                    <div class="insight-copy">
+                        Captures the project’s view of how consistently a song or artist
+                        maintains chart presence over time.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-            fig.update_layout(
-                xaxis_title="Comeback Momentum",
-                yaxis_title="Fandom Intensity",
-            )
-            show_chart(fig, 365)
-        else:
-            st.info("Required score fields are not available.")
-
-    
-    section("Key Insights")
-
-    i1, i2, i3 = st.columns(3)
-
-    with i1:
-        st.markdown(
-            '<div class="info-card">'
-            '<div class="info-title">Chart Re-entry</div>'
-            f'<div class="info-text">'
-            f'{songs_count:,} songs are represented in the integrated analysis.'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-
-    with i2:
-        st.markdown(
-            '<div class="info-card">'
-            '<div class="info-title">Project Focus</div>'
-            '<div class="info-text">'
-            'The dashboard connects chart re-entry, comeback momentum, fandom intensity, '
-            'sustainability and integrated song performance.'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-
-    with i3:
-        st.markdown(
-            '<div class="info-card">'
-            '<div class="info-title">Interpretation</div>'
-            '<div class="info-text">'
-            'All scores are project-specific analytical indices and should be interpreted '
-            'within this dataset and methodology.'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
-
 
 # ============================================================
 # TOP SONGS
@@ -1172,64 +932,33 @@ if page == "Home":
 
 elif page == "Top Songs":
     page_header(
-        "RANKING HUB",
+        "RANKINGS",
         "Top Songs",
-        "A clean ranking view of songs with the strongest integrated project scores.",
+        "Explore the strongest songs across the integrated project score.",
     )
 
-    df = apply_filters(integrated, selected_artists, selected_categories)
-
     if df is None or df.empty:
-        st.warning("No integrated song data is available.")
-        st.stop()
-
-    score_col = first_existing(df, ["overall_performance_score"])
-
-    if score_col:
-        top = df.sort_values(score_col, ascending=False).head(ranking_size)
-
-        cols = st.columns(5)
-        for i, (_, row) in enumerate(top.head(5).iterrows()):
-            with cols[i]:
-                render_song_card(
-                    i + 1,
-                    row.get("song", "Unknown"),
-                    row.get("artist", "Unknown"),
-                    row.get(score_col, np.nan),
-                )
-
-        st.write("")
-
-        display_cols = [
-            "song",
-            "artist",
-            "total_reentries",
-            "average_gap_days",
-            "best_reentry_position",
-            "average_momentum_score",
-            "fandom_intensity_score",
-            "sustainability_score",
-            "overall_performance_score",
-        ]
-        display_cols = [c for c in display_cols if c in top.columns]
-
-        table = top[display_cols].copy()
-
-        st.dataframe(
-            table,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        st.download_button(
-            "Download ranking CSV",
-            data=top.to_csv(index=False).encode("utf-8"),
-            file_name="kpop_top_songs.csv",
-            mime="text/csv",
-        )
+        empty_state("No integrated song data is available.")
     else:
-        st.warning("overall_performance_score is missing from the integrated dataset.")
+        section_head("Top performers", f"Top {ranking_size} by overall score")
+        top_cards(df, min(5, len(df)))
 
+        st.divider()
+
+        section_head("Detailed ranking", "All major analytical dimensions")
+        ranking_table(df, ranking_size)
+
+        csv = (
+            df.sort_values("overall_performance_score", ascending=False)
+            .to_csv(index=False)
+            .encode("utf-8")
+        )
+        st.download_button(
+            "Download filtered ranking CSV",
+            csv,
+            "kpop_filtered_ranking.csv",
+            "text/csv",
+        )
 
 # ============================================================
 # COMEBACK MOMENTUM
@@ -1237,228 +966,158 @@ elif page == "Top Songs":
 
 elif page == "Comeback Momentum":
     page_header(
-        "COMEBACK ANALYSIS",
+        "RE-ENTRY ANALYSIS",
         "Comeback Momentum",
-        "Explore chart returns, gap lengths, re-entry positions and comeback-event strength.",
+        "Understand when songs leave the chart, return, and how strong those returns are.",
     )
 
-    m = apply_filters(momentum, selected_artists, selected_categories)
+    if momentum is None or momentum.empty:
+        empty_state("Phase 4 momentum data could not be found.")
+    else:
+        m = momentum.copy()
+        if selected_artists and "artist" in m.columns:
+            m = m[m["artist"].isin(selected_artists)]
 
-    if m is None or m.empty:
-        st.warning("Phase 4 comeback data is not available.")
-        st.stop()
-
-    gap_col = first_existing(m, ["gap_days"])
-    momentum_col = first_existing(m, ["momentum_score"])
-    position_col = first_existing(m, ["reentry_position"])
-
-    avg_gap = pd.to_numeric(m[gap_col], errors="coerce").mean() if gap_col else np.nan
-    longest_gap = pd.to_numeric(m[gap_col], errors="coerce").max() if gap_col else np.nan
-
-    show_kpis(
-        [
-            (f"{len(m):,}", "Re-entry Events"),
-            (f"{fmt(avg_gap)} days", "Average Gap"),
-            (f"{fmt(longest_gap)} days", "Longest Gap"),
-        ]
-    )
-
-    left, right = st.columns(2, gap="medium")
-
-    with left:
-        with st.container(border=True):
-            chart_card_title("Strongest Comeback Events", "Highest momentum scores")
-
-        if momentum_col:
-            work = m.sort_values(momentum_col, ascending=False).head(10).copy()
-            work["label"] = (
-                work["song"].astype(str)
-                if "song" in work.columns
-                else work.index.astype(str)
-            )
-
-            fig = px.bar(
-                work.sort_values(momentum_col),
-                x=momentum_col,
-                y="label",
-                orientation="h",
-                color=momentum_col,
-                color_continuous_scale=SCALE,
-                hover_data=["artist"] if "artist" in work.columns else None,
-            )
-            fig.update_layout(
-                coloraxis_showscale=False,
-                xaxis_title="Momentum Score",
-                yaxis_title="",
-            )
-            show_chart(fig, 410)
+        if m.empty:
+            empty_state("No comeback events match the selected artist filter.")
         else:
-            st.info("Momentum score is not available.")
+            section_head("Momentum snapshot")
+            k = st.columns(4)
+            k[0].metric("Re-entry events", f"{len(m):,}")
+            k[1].metric("Average gap", f"{nice_number(m['gap_days'].mean())} days" if "gap_days" in m else "—")
+            k[2].metric("Longest gap", f"{nice_number(m['gap_days'].max())} days" if "gap_days" in m else "—")
+            k[3].metric("Songs", f"{m['song'].nunique():,}" if "song" in m else "—")
 
-    
-    with right:
-        with st.container(border=True):
-            chart_card_title("Gap vs Re-entry Position", "Return behaviour")
+            c1, c2 = st.columns(2)
+            with c1:
+                section_head("Strongest comeback events", "Top momentum scores")
+                if "momentum_score" in m.columns:
+                    work = m.sort_values("momentum_score", ascending=False).head(15)
+                    label = work["song"].astype(str) + " — " + work["artist"].astype(str)
+                    fig = px.bar(
+                        work.assign(label=label).sort_values("momentum_score"),
+                        x="momentum_score",
+                        y="label",
+                        orientation="h",
+                        color="momentum_score",
+                        color_continuous_scale=PURPLE_SCALE,
+                    )
+                    fig.update_layout(coloraxis_showscale=False)
+                    show_chart(fig, 470)
+                else:
+                    empty_state("Momentum score column is not available.")
 
-        if gap_col and position_col:
-            fig = px.scatter(
-                m,
-                x=gap_col,
-                y=position_col,
-                color=momentum_col if momentum_col else None,
-                hover_name="song" if "song" in m.columns else None,
-                hover_data=["artist"] if "artist" in m.columns else None,
-                color_continuous_scale=SCALE if momentum_col else None,
-            )
-            fig.update_yaxes(autorange="reversed")
-            fig.update_layout(
-                xaxis_title="Gap (days)",
-                yaxis_title="Re-entry position",
-            )
-            show_chart(fig, 410)
-        else:
-            st.info("Gap and re-entry position fields are not available.")
+            with c2:
+                section_head("Gap vs re-entry position", "Chart return behaviour")
+                if {"gap_days", "reentry_position"}.issubset(m.columns):
+                    fig = px.scatter(
+                        m,
+                        x="gap_days",
+                        y="reentry_position",
+                        hover_name="song",
+                        hover_data=["artist"],
+                        color="momentum_score" if "momentum_score" in m.columns else None,
+                        color_continuous_scale=PURPLE_SCALE,
+                    )
+                    fig.update_yaxes(autorange="reversed")
+                    show_chart(fig, 470)
+                else:
+                    empty_state("Required momentum fields are not available.")
 
-    
-    section("Event Detail", "Detected comeback events")
-
-    cols = [
-        c for c in [
-            "song",
-            "artist",
-            "previous_date",
-            "reentry_date",
-            "gap_days",
-            "reentry_position",
-            "momentum_score",
-        ]
-        if c in m.columns
-    ]
-
-    st.dataframe(
-        m[cols].head(200),
-        use_container_width=True,
-        hide_index=True,
-    )
-
+            section_head("Event-level detail", "Every detected comeback event")
+            cols = [
+                c for c in
+                ["song", "artist", "previous_date", "reentry_date", "gap_days", "reentry_position", "momentum_score"]
+                if c in m.columns
+            ]
+            st.dataframe(m[cols], use_container_width=True, hide_index=True)
 
 # ============================================================
-# FANDOM
+# FANDOM INTENSITY
 # ============================================================
 
 elif page == "Fandom Intensity":
     page_header(
         "FANDOM SIGNALS",
         "Fandom Intensity",
-        "Explore the project-defined fandom intensity score and its relationship with chart behaviour.",
+        "Inspect the project’s song-level fandom intensity index and its relationship with comeback behaviour.",
     )
 
-    f = apply_filters(fandom, selected_artists, selected_categories)
-
-    if f is None or f.empty:
-        st.warning("Phase 5 fandom data is not available.")
-        st.stop()
-
-    fandom_col = first_existing(
-        f,
-        ["fandom_intensity_score", "fandom_score"],
-    )
-
-    if fandom_col:
-        show_kpis(
-            [
-                (fmt(f[fandom_col].max(), 3), "Highest Fandom Score"),
-                (fmt(f[fandom_col].mean(), 3), "Average Fandom Score"),
-                (
-                    f"{f['song'].nunique():,}" if "song" in f.columns else "—",
-                    "Songs Analysed",
-                ),
-            ]
-        )
-
-        left, right = st.columns(2, gap="medium")
-
-        with left:
-            with st.container(border=True):
-                chart_card_title("Highest Fandom Intensity", "Top songs")
-
-            work = f.sort_values(fandom_col, ascending=False).head(10).copy()
-            work["label"] = (
-                work["song"].astype(str)
-                if "song" in work.columns
-                else work.index.astype(str)
-            )
-
-            fig = px.bar(
-                work.sort_values(fandom_col),
-                x=fandom_col,
-                y="label",
-                orientation="h",
-                color=fandom_col,
-                color_continuous_scale=SCALE,
-            )
-            fig.update_layout(
-                coloraxis_showscale=False,
-                xaxis_title="Fandom Intensity",
-                yaxis_title="",
-            )
-            show_chart(fig, 410)
-
-        
-        with right:
-            with st.container(border=True):
-                chart_card_title("Momentum × Fandom", "Bubble size = sustainability")
-
-            if "average_momentum_score" in f.columns:
-                fig = px.scatter(
-                    f,
-                    x="average_momentum_score",
-                    y=fandom_col,
-                    size="sustainability_score" if "sustainability_score" in f.columns else None,
-                    color="sustainability_score" if "sustainability_score" in f.columns else None,
-                    hover_name="song" if "song" in f.columns else None,
-                    hover_data=["artist"] if "artist" in f.columns else None,
-                    color_continuous_scale=SCALE,
-                )
-                fig.update_layout(
-                    xaxis_title="Comeback Momentum",
-                    yaxis_title="Fandom Intensity",
-                )
-                show_chart(fig, 410)
-            else:
-                st.info("Momentum score is not available.")
-
-        
-        if "fandom_category" in f.columns:
-            section("Fandom Category Distribution", "Project-defined categories")
-
-            counts = f["fandom_category"].value_counts().reset_index()
-            counts.columns = ["category", "songs"]
-
-            fig = px.bar(
-                counts.sort_values("songs"),
-                x="songs",
-                y="category",
-                orientation="h",
-                color="songs",
-                color_continuous_scale=SCALE,
-            )
-            fig.update_layout(
-                coloraxis_showscale=False,
-                xaxis_title="Songs",
-                yaxis_title="",
-            )
-            show_chart(fig, 340)
-
-        section("Song-Level Detail", "Fandom analysis table")
-        st.dataframe(
-            f.head(200),
-            use_container_width=True,
-            hide_index=True,
-        )
+    if fandom is None or fandom.empty:
+        empty_state("Phase 5 fandom analysis data could not be found.")
     else:
-        st.warning("No fandom score column was found.")
+        f = fandom.copy()
+        if selected_artists and "artist" in f.columns:
+            f = f[f["artist"].isin(selected_artists)]
 
+        if f.empty:
+            empty_state("No fandom records match the selected artist filter.")
+        else:
+            score = first_existing(f, ["fandom_intensity_score"])
+            if score is None:
+                empty_state("Fandom intensity score column is not available.")
+            else:
+                section_head("Fandom snapshot")
+                k = st.columns(3)
+                k[0].metric("Highest score", nice_number(f[score].max()))
+                k[1].metric("Average score", nice_number(f[score].mean()))
+                k[2].metric("Songs analyzed", f["song"].nunique() if "song" in f else len(f))
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    section_head("Highest fandom intensity", "Top songs")
+                    work = f.sort_values(score, ascending=False).head(15)
+                    label = work["song"].astype(str)
+                    fig = px.bar(
+                        work.sort_values(score),
+                        x=score,
+                        y=label,
+                        orientation="h",
+                        color=score,
+                        color_continuous_scale=PURPLE_SCALE,
+                        hover_data=["artist"] if "artist" in work.columns else None,
+                    )
+                    fig.update_layout(coloraxis_showscale=False)
+                    show_chart(fig, 470)
+
+                with c2:
+                    section_head("Momentum × fandom", "Sustainability shown by colour")
+                    if "average_momentum_score" in f.columns:
+                        fig = px.scatter(
+                            f,
+                            x="average_momentum_score",
+                            y=score,
+                            hover_name="song",
+                            hover_data=["artist"] if "artist" in f.columns else None,
+                            size="sustainability_score" if "sustainability_score" in f.columns else None,
+                            color="sustainability_score" if "sustainability_score" in f.columns else None,
+                            color_continuous_scale=PURPLE_SCALE,
+                        )
+                        show_chart(fig, 470)
+                    else:
+                        empty_state("Average momentum score is not available.")
+
+                if "fandom_category" in f.columns:
+                    section_head("Fandom category distribution", "Project-defined categories")
+                    counts = f["fandom_category"].value_counts().reset_index()
+                    counts.columns = ["category", "songs"]
+                    fig = px.bar(
+                        counts,
+                        x="category",
+                        y="songs",
+                        color="songs",
+                        color_continuous_scale=PURPLE_SCALE,
+                    )
+                    fig.update_layout(coloraxis_showscale=False)
+                    show_chart(fig, 360)
+
+                section_head("Song-level detail")
+                cols = [
+                    c for c in
+                    ["song", "artist", score, "average_momentum_score", "sustainability_score", "fandom_category"]
+                    if c in f.columns
+                ]
+                st.dataframe(f[cols].sort_values(score, ascending=False), use_container_width=True, hide_index=True)
 
 # ============================================================
 # SUSTAINABILITY
@@ -1468,97 +1127,83 @@ elif page == "Sustainability":
     page_header(
         "LONGEVITY",
         "Chart Sustainability",
-        "Explore which songs and artists maintain stronger chart presence over time.",
+        "See which songs and artists maintain chart presence most consistently in the project.",
     )
 
-    s = apply_filters(sustainability, selected_artists, selected_categories)
-
-    if s is None or s.empty:
-        st.warning("Phase 6 sustainability data is not available.")
-        st.stop()
-
-    sustainability_col = first_existing(
-        s,
-        ["sustainability_score"],
-    )
-
-    if sustainability_col:
-        top_row = s.sort_values(sustainability_col, ascending=False).iloc[0]
-
-        show_kpis(
-            [
-                (fmt(s[sustainability_col].max(), 3), "Highest Sustainability"),
-                (fmt(s[sustainability_col].mean(), 3), "Average Sustainability"),
-                (str(top_row.get("song", "—"))[:20], "Top Song"),
-            ]
-        )
-
-        section("Top Songs by Sustainability", "Highest project scores")
-
-        work = s.sort_values(sustainability_col, ascending=False).head(10).copy()
-        work["label"] = (
-            work["song"].astype(str)
-            if "song" in work.columns
-            else work.index.astype(str)
-        )
-
-        fig = px.bar(
-            work.sort_values(sustainability_col),
-            x=sustainability_col,
-            y="label",
-            orientation="h",
-            color=sustainability_col,
-            color_continuous_scale=SCALE,
-            hover_data=["artist"] if "artist" in work.columns else None,
-        )
-        fig.update_layout(
-            coloraxis_showscale=False,
-            xaxis_title="Sustainability Score",
-            yaxis_title="",
-        )
-        show_chart(fig, 410)
-
-        if artist_sustainability is not None and not artist_sustainability.empty:
-            a = apply_filters(
-                artist_sustainability,
-                selected_artists,
-                selected_categories,
-            )
-
-            artist_score = first_existing(
-                a,
-                ["sustainability_score"],
-            )
-
-            if artist_score and "artist" in a.columns:
-                section("Artist Sustainability", "Artist-level view")
-
-                work = a.sort_values(artist_score, ascending=False).head(10).copy()
-
-                fig = px.bar(
-                    work.sort_values(artist_score),
-                    x=artist_score,
-                    y="artist",
-                    orientation="h",
-                    color=artist_score,
-                    color_continuous_scale=SCALE,
-                )
-                fig.update_layout(
-                    coloraxis_showscale=False,
-                    xaxis_title="Sustainability Score",
-                    yaxis_title="",
-                )
-                show_chart(fig, 400)
-
-        section("Song-Level Detail")
-        st.dataframe(
-            s.head(200),
-            use_container_width=True,
-            hide_index=True,
-        )
+    if sustainability is None or sustainability.empty:
+        empty_state("Phase 6 song sustainability data could not be found.")
     else:
-        st.warning("No sustainability score column was found.")
+        s = sustainability.copy()
+        if selected_artists and "artist" in s.columns:
+            s = s[s["artist"].isin(selected_artists)]
 
+        score = first_existing(s, ["sustainability_score"])
+
+        if s.empty or score is None:
+            empty_state("No sustainability records match the current filters.")
+        else:
+            section_head("Sustainability snapshot")
+            top_row = s.sort_values(score, ascending=False).iloc[0]
+            k = st.columns(3)
+            k[0].metric("Highest score", nice_number(s[score].max()))
+            k[1].metric("Average score", nice_number(s[score].mean()))
+            k[2].metric("Top song", str(top_row.get("song", "—"))[:26])
+
+            c1, c2 = st.columns(2)
+            with c1:
+                section_head("Song sustainability", "Highest project scores")
+                work = s.sort_values(score, ascending=False).head(15)
+                fig = px.bar(
+                    work.sort_values(score),
+                    x=score,
+                    y="song",
+                    orientation="h",
+                    color=score,
+                    color_continuous_scale=PURPLE_SCALE,
+                    hover_data=["artist"] if "artist" in work.columns else None,
+                )
+                fig.update_layout(coloraxis_showscale=False)
+                show_chart(fig, 470)
+
+            with c2:
+                section_head("Sustainability vs momentum", "Song-level relationship")
+                if "average_momentum_score" in s.columns:
+                    fig = px.scatter(
+                        s,
+                        x="average_momentum_score",
+                        y=score,
+                        hover_name="song",
+                        hover_data=["artist"] if "artist" in s.columns else None,
+                        color=score,
+                        color_continuous_scale=PURPLE_SCALE,
+                    )
+                    show_chart(fig, 470)
+                else:
+                    empty_state("Momentum data is not available in the sustainability file.")
+
+            section_head("Artist sustainability")
+            if artist_sustainability is not None and not artist_sustainability.empty:
+                a = artist_sustainability.copy()
+                if selected_artists and "artist" in a.columns:
+                    a = a[a["artist"].isin(selected_artists)]
+
+                ascore = first_existing(a, ["sustainability_score"])
+                if ascore:
+                    work = a.sort_values(ascore, ascending=False).head(15)
+                    fig = px.bar(
+                        work.sort_values(ascore),
+                        x=ascore,
+                        y="artist",
+                        orientation="h",
+                        color=ascore,
+                        color_continuous_scale=PURPLE_SCALE,
+                    )
+                    fig.update_layout(coloraxis_showscale=False)
+                    show_chart(fig, 420)
+                else:
+                    st.info("Artist sustainability score column is not available.")
+            else:
+                st.info("Artist sustainability file is optional and was not found.")
 
 # ============================================================
 # ARTIST ANALYSIS
@@ -1568,255 +1213,94 @@ elif page == "Artist Analysis":
     page_header(
         "ARTIST VIEW",
         "Artist Analysis",
-        "Inspect artist-level sustainability together with momentum and fandom signals.",
+        "Compare artist-level sustainability and the project’s supporting momentum and fandom signals.",
     )
 
-    # Use the integrated song-level dataset as the single source of truth.
-    # This avoids schema mismatches in the optional Phase 6 artist CSV.
-    artist_base = apply_filters(integrated, selected_artists, selected_categories)
-
-    if artist_base is None or artist_base.empty:
-        st.warning("Integrated song data is not available for artist analysis.")
-        st.stop()
-
-    if "artist" not in artist_base.columns:
-        st.warning("The integrated dataset does not contain an artist column.")
-        st.stop()
-
-    # Build artist-level metrics from the same scores used elsewhere
-    # in the dashboard. Mean is used so every artist is represented
-    # consistently across songs.
-    numeric_artist_cols = [
-        c
-        for c in [
-            "sustainability_score",
-            "average_momentum_score",
-            "fandom_intensity_score",
-            "overall_performance_score",
-        ]
-        if c in artist_base.columns
-    ]
-
-    artist_work = artist_base.copy()
-    for col in numeric_artist_cols:
-        artist_work[col] = pd.to_numeric(artist_work[col], errors="coerce")
-
-    agg_map = {col: "mean" for col in numeric_artist_cols}
-    artist_summary = (
-        artist_work.groupby("artist", dropna=True)
-        .agg(agg_map)
-        .reset_index()
-    )
-
-    song_counts = (
-        artist_work.groupby("artist", dropna=True)["song"]
-        .nunique()
-        .rename("song_count")
-        .reset_index()
-        if "song" in artist_work.columns
-        else pd.DataFrame(columns=["artist", "song_count"])
-    )
-
-    if not song_counts.empty:
-        artist_summary = artist_summary.merge(song_counts, on="artist", how="left")
-
-    sustainability_col = first_existing(
-        artist_summary,
-        ["sustainability_score"],
-    )
-
-    momentum_col = first_existing(
-        artist_summary,
-        ["average_momentum_score"],
-    )
-
-    fandom_col = first_existing(
-        artist_summary,
-        ["fandom_intensity_score"],
-    )
-
-    if sustainability_col is None:
-        st.warning(
-            "The integrated dataset does not contain sustainability_score, "
-            "so artist sustainability cannot be displayed."
-        )
-        st.stop()
-
-    artist_summary = artist_summary.dropna(
-        subset=[sustainability_col]
-    ).copy()
-
-    if artist_summary.empty:
-        st.warning("No artist sustainability values are available.")
-        st.stop()
-
-    artist_list = sorted(
-        artist_summary["artist"].astype(str).dropna().unique().tolist()
-    )
-
-    selected_artist = st.selectbox(
-        "Select an artist",
-        ["All artists"] + artist_list,
-    )
-
-    if selected_artist == "All artists":
-        work = artist_summary.copy()
+    if artist_sustainability is None or artist_sustainability.empty:
+        empty_state("Artist sustainability data could not be found.")
     else:
-        work = artist_summary[
-            artist_summary["artist"].astype(str) == selected_artist
-        ].copy()
+        a = artist_sustainability.copy()
+        if selected_artists and "artist" in a.columns:
+            a = a[a["artist"].isin(selected_artists)]
 
-    selected_row = work.iloc[0]
-
-    show_kpis(
-        [
-            (
-                fmt(selected_row.get(sustainability_col), 3),
-                "Sustainability",
-            ),
-            (
-                fmt(selected_row.get(momentum_col), 3)
-                if momentum_col
-                else "—",
-                "Momentum",
-            ),
-            (
-                fmt(selected_row.get(fandom_col), 3)
-                if fandom_col
-                else "—",
-                "Fandom",
-            ),
-            (
-                f"{int(selected_row.get('song_count', 0)):,}",
-                "Songs",
-            ),
-        ]
-    )
-
-    left, right = st.columns(2)
-
-    with left:
-        with st.container(border=True):
-            chart_card_title(
-                "Artist Sustainability",
-                "Mean score across analysed songs",
-            )
-
-            top = artist_summary.sort_values(
-                sustainability_col,
-                ascending=False,
-            ).head(ranking_size).copy()
-
-            fig = px.bar(
-                top.sort_values(sustainability_col),
-                x=sustainability_col,
-                y="artist",
-                orientation="h",
-                color=sustainability_col,
-                color_continuous_scale=SCALE,
-            )
-            fig.update_layout(
-                coloraxis_showscale=False,
-                xaxis_title="Sustainability Score",
-                yaxis_title="",
-            )
-            show_chart(fig, 410)
-
-    with right:
-        with st.container(border=True):
-            chart_card_title(
-                "Momentum vs Fandom",
-                "Artist-level mean scores",
-            )
-
-            if momentum_col and fandom_col:
-                plot_df = artist_summary.dropna(
-                    subset=[momentum_col, fandom_col]
-                ).copy()
-
-                fig = px.scatter(
-                    plot_df,
-                    x=momentum_col,
-                    y=fandom_col,
-                    size="song_count" if "song_count" in plot_df.columns else None,
-                    color=sustainability_col,
-                    hover_name="artist",
-                    color_continuous_scale=SCALE,
-                )
-                fig.update_layout(
-                    coloraxis_colorbar_title="Sustainability",
-                    xaxis_title="Momentum",
-                    yaxis_title="Fandom Intensity",
-                )
-                show_chart(fig, 410)
+        if a.empty:
+            empty_state("No artist records match the current filter.")
+        else:
+            score = first_existing(a, ["sustainability_score"])
+            if score is None:
+                empty_state("Artist sustainability score column is not available.")
             else:
-                st.info(
-                    "Momentum and fandom scores are not available "
-                    "in the integrated dataset."
+                artists = sorted(a["artist"].dropna().astype(str).unique())
+                selected = st.selectbox("Select an artist", artists)
+
+                row = a[a["artist"].astype(str) == selected].iloc[0]
+
+                section_head("Selected artist", selected)
+                k = st.columns(4)
+                k[0].metric("Sustainability", nice_number(row.get(score, np.nan)))
+                k[1].metric(
+                    "Momentum",
+                    nice_number(row.get("average_momentum_score", np.nan)),
+                )
+                k[2].metric(
+                    "Fandom",
+                    nice_number(row.get("fandom_intensity_score", np.nan)),
+                )
+                k[3].metric(
+                    "Songs",
+                    str(row.get("song_count", row.get("songs", "—"))),
                 )
 
-    section(
-        "Selected Artist Profile",
-        "Mean scores across the artist's analysed songs",
-    )
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    section_head("Artist score profile")
+                    labels = []
+                    values = []
+                    for label, col in [
+                        ("Sustainability", score),
+                        ("Momentum", "average_momentum_score"),
+                        ("Fandom", "fandom_intensity_score"),
+                    ]:
+                        if col in row.index and pd.notna(row[col]):
+                            labels.append(label)
+                            values.append(float(row[col]))
 
-    if selected_artist != "All artists":
-        profile_labels = []
-        profile_values = []
+                    if values:
+                        fig = go.Figure(
+                            go.Scatterpolar(
+                                r=values + [values[0]],
+                                theta=labels + [labels[0]],
+                                fill="toself",
+                                line=dict(color=COLORS["purple"], width=2),
+                            )
+                        )
+                        fig.update_layout(
+                            polar=dict(
+                                radialaxis=dict(showticklabels=True, gridcolor="#E9E3F1"),
+                                angularaxis=dict(gridcolor="#E9E3F1"),
+                            ),
+                            showlegend=False,
+                        )
+                        show_chart(fig, 390)
+                    else:
+                        empty_state("Not enough artist-level score data for a profile chart.")
 
-        for label, col in [
-            ("Sustainability", sustainability_col),
-            ("Momentum", momentum_col),
-            ("Fandom", fandom_col),
-        ]:
-            if col and pd.notna(selected_row.get(col)):
-                profile_labels.append(label)
-                profile_values.append(float(selected_row[col]))
+                with c2:
+                    section_head("Artist comparison", "Sustainability score")
+                    work = a.sort_values(score, ascending=False).head(ranking_size)
+                    fig = px.bar(
+                        work.sort_values(score),
+                        x=score,
+                        y="artist",
+                        orientation="h",
+                        color=score,
+                        color_continuous_scale=PURPLE_SCALE,
+                    )
+                    fig.update_layout(coloraxis_showscale=False)
+                    show_chart(fig, 390)
 
-        if profile_values:
-            fig = go.Figure(
-                go.Scatterpolar(
-                    r=profile_values + [profile_values[0]],
-                    theta=profile_labels + [profile_labels[0]],
-                    fill="toself",
-                    line=dict(color="#7B3FC6", width=2),
-                    fillcolor="rgba(123,63,198,0.16)",
-                )
-            )
-            fig.update_layout(
-                height=360,
-                margin=dict(l=20, r=20, t=20, b=20),
-                paper_bgcolor="rgba(0,0,0,0)",
-                polar=dict(
-                    bgcolor="rgba(0,0,0,0)",
-                    radialaxis=dict(
-                        showgrid=True,
-                        gridcolor="#E8E3F0",
-                    ),
-                    angularaxis=dict(
-                        gridcolor="#E8E3F0",
-                    ),
-                ),
-                showlegend=False,
-            )
-            show_chart(fig, 360)
-    else:
-        st.info("Select an artist above to see the individual score profile.")
-
-    section(
-        "Artist Dataset",
-        "Artist-level metrics calculated from the integrated song dataset",
-    )
-
-    st.dataframe(
-        artist_summary.sort_values(
-            sustainability_col,
-            ascending=False,
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
-
+                section_head("Artist dataset")
+                st.dataframe(a, use_container_width=True, hide_index=True)
 
 # ============================================================
 # SONG EXPLORER
@@ -1826,137 +1310,121 @@ elif page == "Song Explorer":
     page_header(
         "DEEP DIVE",
         "Song Explorer",
-        "Open a song profile and inspect its integrated analytical dimensions.",
+        "Open a single song profile and inspect its four core analytical dimensions.",
     )
 
-    df = apply_filters(integrated, selected_artists, selected_categories)
-
     if df is None or df.empty or "song" not in df.columns:
-        st.warning("Integrated song data is not available.")
-        st.stop()
-
-    if "artist" in df.columns:
-        df["_option"] = (
-            df["song"].astype(str)
-            + " — "
-            + df["artist"].astype(str)
-        )
+        empty_state("Integrated song data is not available.")
     else:
-        df["_option"] = df["song"].astype(str)
+        options = (
+            df[["song", "artist"]]
+            .drop_duplicates()
+            .assign(label=lambda x: x["song"].astype(str) + " — " + x["artist"].astype(str))
+        )
+        labels = options["label"].tolist()
 
-    options = df["_option"].drop_duplicates().tolist()
+        selected_label = st.selectbox("Choose a song", labels)
 
-    selected = st.selectbox("Choose a song", options)
+        selected_row = options[options["label"] == selected_label].iloc[0]
+        song = selected_row["song"]
+        artist = selected_row["artist"]
 
-    row = df[df["_option"] == selected].iloc[0]
+        row = df[
+            (df["song"].astype(str) == str(song))
+            & (df["artist"].astype(str) == str(artist))
+        ].iloc[0]
 
-    song = str(row.get("song", "Unknown"))
-    artist = str(row.get("artist", "Unknown"))
+        cover = cached_cover(str(song), str(artist))
 
-    left, right = st.columns([.34, .66], gap="large")
+        left, right = st.columns([0.32, 0.68])
 
-    with left:
-        cover = get_cover(song, artist)
-        if cover:
-            st.image(cover, width="stretch")
-        else:
+        with left:
+            if cover:
+                st.image(cover, use_container_width=True)
             st.markdown(
-                '<div class="song-placeholder" style="border-radius:14px;">K</div>',
+                f"""
+                <div style="margin-top:12px;">
+                    <div class="eyebrow">Song profile</div>
+                    <div style="font-family:'Plus Jakarta Sans';font-size:1.45rem;font-weight:800;">
+                        {html.escape(str(song))}
+                    </div>
+                    <div class="small-muted" style="margin-top:4px;">
+                        {html.escape(str(artist))}
+                    </div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
-        st.markdown(
-            f'<div class="section-title" style="margin-top:12px;">'
-            f'{html.escape(song)}</div>'
-            f'<div class="song-artist">{html.escape(artist)}</div>',
-            unsafe_allow_html=True,
-        )
-
-    with right:
-        show_kpis(
-            [
-                (fmt(row.get("overall_performance_score"), 3), "Overall Performance"),
-                (fmt(row.get("average_momentum_score"), 3), "Momentum"),
-                (fmt(row.get("fandom_intensity_score"), 3), "Fandom"),
-                (fmt(row.get("sustainability_score"), 3), "Sustainability"),
+        with right:
+            section_head("Core scores", "Integrated analytical profile")
+            score_items = [
+                ("Overall", "overall_performance_score"),
+                ("Momentum", "average_momentum_score"),
+                ("Fandom", "fandom_intensity_score"),
+                ("Sustainability", "sustainability_score"),
             ]
-        )
+            cols = st.columns(4)
+            for col, (label, key) in zip(cols, score_items):
+                with col:
+                    value = row.get(key, np.nan)
+                    st.markdown(
+                        f"""
+                        <div class="profile-score">
+                            <div class="profile-score-label">{label}</div>
+                            <div class="profile-score-value">{nice_number(value)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-        section("Score Profile")
+            section_head("Score profile")
+            labels = []
+            values = []
+            for label, key in score_items[1:]:
+                value = row.get(key, np.nan)
+                if pd.notna(value):
+                    labels.append(label)
+                    values.append(float(value))
 
-        dimensions = [
-            ("Overall", row.get("overall_performance_score", np.nan)),
-            ("Momentum", row.get("average_momentum_score", np.nan)),
-            ("Fandom", row.get("fandom_intensity_score", np.nan)),
-            ("Sustainability", row.get("sustainability_score", np.nan)),
-        ]
-
-        radar_values = []
-        radar_labels = []
-
-        for label, value in dimensions:
-            try:
-                value = float(value)
-                if not np.isnan(value):
-                    radar_labels.append(label)
-                    radar_values.append(value)
-            except Exception:
-                pass
-
-        if radar_values:
-            radar_values_closed = radar_values + [radar_values[0]]
-            radar_labels_closed = radar_labels + [radar_labels[0]]
-
-            fig = px.line_polar(
-                r=radar_values_closed,
-                theta=radar_labels_closed,
-                line_close=True,
-            )
-            fig.update_traces(
-                fill="toself",
-                line_color="#6D35B1",
-            )
-            fig.update_layout(
-                polar=dict(
-                    bgcolor="rgba(0,0,0,0)",
-                    radialaxis=dict(
-                        visible=True,
-                        gridcolor="#E7DFEF",
+            if values:
+                fig = go.Figure(
+                    go.Scatterpolar(
+                        r=values + [values[0]],
+                        theta=labels + [labels[0]],
+                        fill="toself",
+                        line=dict(color=COLORS["purple"], width=2),
+                        fillcolor="rgba(109,63,163,0.18)",
+                    )
+                )
+                fig.update_layout(
+                    polar=dict(
+                        radialaxis=dict(showgrid=True, gridcolor="#E9E3F1"),
+                        angularaxis=dict(gridcolor="#E9E3F1"),
                     ),
-                    angularaxis=dict(
-                        gridcolor="#E7DFEF",
-                    ),
-                ),
-                showlegend=False,
+                    showlegend=False,
+                )
+                show_chart(fig, 390)
+
+        section_head("Chart behaviour")
+        details = {}
+        for label, key in [
+            ("Total re-entries", "total_reentries"),
+            ("Average gap days", "average_gap_days"),
+            ("Longest gap days", "longest_gap_days"),
+            ("Best re-entry position", "best_reentry_position"),
+            ("Average re-entry position", "average_reentry_position"),
+        ]:
+            if key in row.index:
+                details[label] = row[key]
+
+        if details:
+            detail_df = pd.DataFrame(
+                {"Metric": list(details.keys()), "Value": list(details.values())}
             )
-            show_chart(fig, 370)
-
-    section("Chart Behaviour")
-
-    behaviour_cols = [
-        c for c in [
-            "total_reentries",
-            "average_gap_days",
-            "longest_gap_days",
-            "best_reentry_position",
-            "average_reentry_position",
-        ]
-        if c in row.index
-    ]
-
-    if behaviour_cols:
-        behaviour = pd.DataFrame(
-            {
-                "Metric": [c.replace("_", " ").title() for c in behaviour_cols],
-                "Value": [row[c] for c in behaviour_cols],
-            }
-        )
-        st.dataframe(
-            behaviour,
-            use_container_width=True,
-            hide_index=True,
-        )
-
+            st.dataframe(detail_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Detailed chart-behaviour fields are not available.")
 
 # ============================================================
 # ABOUT
@@ -1964,91 +1432,109 @@ elif page == "Song Explorer":
 
 else:
     page_header(
-        "PROJECT METHODOLOGY",
-        "About the Project",
-        "What the dashboard measures, how the dimensions connect, and how to interpret the scores.",
+        "PROJECT",
+        "About the Analysis",
+        "A concise explanation of what this dashboard measures and how to interpret it.",
     )
 
-    left, right = st.columns([1.15, .85], gap="medium")
+    c1, c2 = st.columns([1.15, 0.85])
 
-    with left:
-        section("Project Objective")
+    with c1:
+        section_head("Project objective")
         st.markdown(
-            '<div class="info-card">'
-            '<div class="info-text">'
-            'This project studies chart behaviour in the South Korea Top 50 playlist '
-            'through comeback momentum, chart re-entry, fandom intensity, '
-            'sustainability and integrated song performance.'
-            '</div></div>',
+            """
+            <div class="card">
+                <p style="line-height:1.7;color:#756A7F;margin-top:0;">
+                    This project analyzes songs appearing in the South Korea Top 50
+                    playlist and combines chart re-entry behaviour with comeback
+                    momentum, fandom intensity and chart sustainability.
+                </p>
+                <p style="line-height:1.7;color:#756A7F;margin-bottom:0;">
+                    The dashboard is designed to make the analytical pipeline easier
+                    to explore, compare and communicate.
+                </p>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
-        section("Five Analytical Dimensions")
-
+        section_head("Five analytical dimensions")
         dimensions = [
-            ("Chart Re-entry", "Detects songs returning to the chart after an absence."),
-            ("Comeback Momentum", "Measures the strength of detected return events."),
-            ("Fandom Intensity", "A project-defined score built from chart behaviour."),
-            ("Chart Sustainability", "Measures persistence and continued chart presence."),
-            ("Integrated Performance", "Combines the project dimensions into an overall score."),
+            ("01", "Chart re-entry", "Identifies songs returning after an absence."),
+            ("02", "Comeback momentum", "Quantifies the project’s return-strength signal."),
+            ("03", "Fandom intensity", "Summarizes the project-defined fandom signal."),
+            ("04", "Chart sustainability", "Measures continued chart presence in the project."),
+            ("05", "Integrated performance", "Combines the project’s core dimensions into one score."),
         ]
-
-        for title, text in dimensions:
+        for num, title, copy in dimensions:
             st.markdown(
-                f'<div class="info-card" style="margin-bottom:9px;">'
-                f'<div class="info-title">{html.escape(title)}</div>'
-                f'<div class="info-text">{html.escape(text)}</div>'
-                f'</div>',
+                f"""
+                <div class="card" style="margin-bottom:9px;padding:14px 16px;">
+                    <span style="color:{COLORS["purple"]};font-weight:800;">{num}</span>
+                    <span style="font-weight:800;margin-left:10px;">{title}</span>
+                    <div class="small-muted" style="margin-top:4px;margin-left:33px;">{copy}</div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
-    with right:
-        section("Interpretation")
-
+    with c2:
+        section_head("Interpretation note")
         st.markdown(
-            '<div class="info-card">'
-            '<div class="info-text">'
-            'The scores in this dashboard are analytical indices created for this project. '
-            'They should not be interpreted as direct measurements of real-world fandom size, '
-            'fan count, total popularity, or commercial revenue.'
-            '</div></div>',
+            """
+            <div class="insight">
+                <div class="insight-title">Use the scores as analytical indices</div>
+                <div class="insight-copy">
+                    The project-specific scores should be interpreted within this
+                    dataset and methodology. They are not direct measurements of
+                    real-world fan counts, total audience size, market share,
+                    commercial revenue, or universal popularity.
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
-        section("Data Status")
+        section_head("Data availability")
+        if integrated is not None:
+            st.success(f"Integrated dataset loaded · {len(integrated):,} rows")
+        else:
+            st.warning("Integrated dataset not found.")
 
-        files = [
-            ("Integrated analysis", integrated),
-            ("Comeback momentum", momentum),
-            ("Fandom intensity", fandom),
-            ("Sustainability", sustainability),
-            ("Artist sustainability", artist_sustainability),
-            ("Cleaned source data", cleaned),
-        ]
+        if momentum is not None:
+            st.success(f"Momentum dataset loaded · {len(momentum):,} rows")
+        else:
+            st.warning("Momentum dataset not found.")
 
-        rows = []
-        for name, frame in files:
-            rows.append(
-                {
-                    "Dataset": name,
-                    "Status": "Loaded" if frame is not None and not frame.empty else "Not found",
-                    "Rows": len(frame) if frame is not None else 0,
-                }
-            )
+        if fandom is not None:
+            st.success(f"Fandom dataset loaded · {len(fandom):,} rows")
+        else:
+            st.warning("Fandom dataset not found.")
 
-        st.dataframe(
-            pd.DataFrame(rows),
-            use_container_width=True,
-            hide_index=True,
-        )
+        if sustainability is not None:
+            st.success(f"Sustainability dataset loaded · {len(sustainability):,} rows")
+        else:
+            st.warning("Sustainability dataset not found.")
 
-        section("Technology")
+    section_head("Technology")
+    tech = st.columns(4)
+    tech[0].metric("Python", "Core")
+    tech[1].metric("Pandas", "Data")
+    tech[2].metric("Plotly", "Charts")
+    tech[3].metric("Streamlit", "Dashboard")
 
-        st.markdown(
-            '<div class="info-card">'
-            '<div class="info-text">'
-            'Python · Pandas · Plotly · Streamlit'
-            '</div></div>',
-            unsafe_allow_html=True,
-        )
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="footer">
+        <b>K-POP CHART ANALYTICS</b> · Comeback Momentum · Chart Re-Entry ·
+        Fandom Intensity · Sustainability<br>
+        Built with Python, Pandas, Plotly and Streamlit
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
