@@ -683,12 +683,25 @@ p,span,label,td,th {{
 # ============================================================
 
 APP_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = APP_DIR.parent
 
-LOGO_PATH = PROJECT_DIR / "img" / "logo.png"
+# The dashboard can run either from the project root or from a
+# dedicated dashboard subfolder. Keep the same UI/design in both cases.
+if (APP_DIR / "outputs").exists():
+    PROJECT_DIR = APP_DIR
+elif (APP_DIR.parent / "outputs").exists():
+    PROJECT_DIR = APP_DIR.parent
+else:
+    PROJECT_DIR = APP_DIR
+
+LOGO_CANDIDATES = [
+    PROJECT_DIR / "img" / "logo.png",
+    APP_DIR / "img" / "logo.png",
+    PROJECT_DIR / "logo.png",
+]
+LOGO_PATH = next((p for p in LOGO_CANDIDATES if p.exists()), None)
 LOGO_DATA = (
     base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
-    if LOGO_PATH.exists()
+    if LOGO_PATH is not None
     else ""
 )
 
@@ -716,8 +729,8 @@ artist_sustainability = read_output("phase6_artist_sustainability_analysis.csv")
 
 if dashboard is None:
     st.error(
-        "Dashboard data was not found. Place the KPOP_Dashboard_Final folder "
-        "inside the main KPOP project folder beside the outputs folder."
+        "Dashboard data was not found. Please confirm the project outputs folder "
+        "contains KPOP_FINAL_DASHBOARD_DATA.csv."
     )
     st.stop()
 
